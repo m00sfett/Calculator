@@ -78,9 +78,24 @@ class CalculatorViewModel : ViewModel() {
     }
 
     fun onBinary(op: Operation) {
-        val x = parseInput()
+        val b = parseInput()
+        val a = uiState.firstOperand
+        val pending = uiState.pendingOp
+
+        if (a != null && pending != null && b != null) {
+            val result = performOperation(a, pending, b) ?: return
+            uiState = uiState.copy(
+                firstOperand = result,
+                ans = result,
+                pendingOp = op,
+                input = "",
+                error = null
+            )
+            return
+        }
+
         // If no current input, allow chaining with ANS
-        val operand = x ?: uiState.ans
+        val operand = b ?: uiState.ans
         if (operand == null) {
             // Nothing to operate on; just stash the operation and wait
             uiState = uiState.copy(pendingOp = op)
@@ -99,18 +114,7 @@ class CalculatorViewModel : ViewModel() {
         val b = parseInput()
         val op = uiState.pendingOp
         if (a == null || b == null || op == null) return
-
-        val result = when (op) {
-            is Operation.Add -> a + b
-            is Operation.Sub -> a - b
-            is Operation.Mul -> a * b
-            is Operation.Div -> {
-                if (b == 0.0) {
-                    setError("Fehler: Division durch 0")
-                    return
-                } else a / b
-            }
-        }
+        val result = performOperation(a, op, b) ?: return
         commitResult(result)
     }
 
@@ -127,6 +131,18 @@ class CalculatorViewModel : ViewModel() {
 
     private fun parseInput(): Double? =
         uiState.input.replace(',', '.').toDoubleOrNull()
+
+    private fun performOperation(a: Double, op: Operation, b: Double): Double? = when (op) {
+        is Operation.Add -> a + b
+        is Operation.Sub -> a - b
+        is Operation.Mul -> a * b
+        is Operation.Div -> {
+            if (b == 0.0) {
+                setError("Fehler: Division durch 0")
+                null
+            } else a / b
+        }
+    }
 
     private fun commitResult(result: Double) {
         uiState = uiState.copy(
