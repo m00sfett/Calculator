@@ -12,7 +12,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlin.math.sqrt
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -21,154 +20,207 @@ import java.util.Locale
 // data class: holds pure UI state data
 data class CalculatorUiState(
     val input: String = "",        // current input buffer (as text)
+    val expression: String = "",   // full expression shown on top
     val ans: Double? = null,       // last result ("ANS")
-    val pendingOp: Operation? = null,
-    val firstOperand: Double? = null,
     val error: String? = null      // nullable = no error
 )
 
-// sealed class: closed set of operations => when() can be exhaustive
-sealed class Operation {
-    object Add : Operation()
-    object Sub : Operation()
-    object Mul : Operation()
-    object Div : Operation()
-}
-
 class CalculatorViewModel : ViewModel() {
-
     var uiState by mutableStateOf(CalculatorUiState())
         private set
 
     // region Intent handlers ---------------------------------------------------
 
     fun onDigit(ch: Char) {
-        // Guard: allow only digits 0-9
         if (ch in '0'..'9') {
+            if (uiState.expression.contains("=")) {
+                uiState = uiState.copy(expression = "", input = "")
+            }
             updateInput(uiState.input + ch)
         }
     }
 
     fun onDot() {
-        // Prevent multiple dots
+        if (uiState.expression.contains("=")) {
+            uiState = uiState.copy(expression = "", input = "")
+        }
         if (!uiState.input.contains('.')) {
             val newInput = if (uiState.input.isEmpty()) "0." else uiState.input + "."
             updateInput(newInput)
         }
     }
 
-    fun onClear() {
-        uiState = CalculatorUiState(ans = uiState.ans) // keep ANS, clear rest
+    fun onOperator(op: Char) {
+        var expr = uiState.expression
+        var inp = uiState.input
+        if (expr.contains("=")) {
+            expr = inp
+        } else {
+            if (inp.isNotEmpty()) expr += inp
+        }
+        if (expr.isEmpty()) return
+        expr += op
+        uiState = uiState.copy(expression = expr, input = "", error = null)
     }
 
-    fun onUnarySquare() {
-        val x = currentNumberOrAns() ?: return
-        val result = x * x
-        commitResult(result)
+    fun onOpenParen() {
+        var expr = uiState.expression
+        if (expr.contains("=")) expr = ""
+        expr += "("
+        uiState = uiState.copy(expression = expr, error = null)
     }
 
-    fun onUnarySqrt() {
-        val x = currentNumberOrAns() ?: return
-        if (x < 0.0) {
-            setError("Fehler: Wurzel aus negativer Zahl")
-            return
+    fun onCloseParen() {
+        var expr = uiState.expression
+        var inp = uiState.input
+        if (expr.contains("=")) {
+            expr = ""
+            inp = ""
         }
-        val result = sqrt(x)
-        commitResult(result)
+        if (inp.isNotEmpty()) {
+            expr += inp
+            inp = ""
+        }
+        expr += ")"
+        uiState = uiState.copy(expression = expr, input = inp, error = null)
     }
 
-    fun onBinary(op: Operation) {
-        val b = parseInput()
-        val a = uiState.firstOperand
-        val pending = uiState.pendingOp
-
-        if (a != null && pending != null && b != null) {
-            val result = performOperation(a, pending, b) ?: return
-            uiState = uiState.copy(
-                firstOperand = result,
-                ans = result,
-                pendingOp = op,
-                input = "",
-                error = null
-            )
-            return
-        }
-
-        // If no current input, allow chaining with ANS
-        val operand = b ?: uiState.ans
-        if (operand == null) {
-            // Nothing to operate on; just stash the operation and wait
-            uiState = uiState.copy(pendingOp = op)
-            return
-        }
+    fun onEquals() {
+        var expr = uiState.expression
+        val inp = uiState.input
+        if (expr.contains("=")) return
+        if (inp.isNotEmpty()) expr += inp
+        if (expr.isEmpty()) return
+        val result = evaluateExpression(expr) ?: return
         uiState = uiState.copy(
-            firstOperand = operand,
-            pendingOp = op,
-            input = "",
+            expression = "$expr =",
+            input = format(result),
+            ans = result,
             error = null
         )
     }
 
-    fun onEquals() {
-        val a = uiState.firstOperand
-        val b = parseInput()
-        val op = uiState.pendingOp
-        if (a == null || b == null || op == null) return
-        val result = performOperation(a, op, b) ?: return
-        commitResult(result)
-    }
-
     fun onAns() {
         val a = uiState.ans ?: return
+        if (uiState.expression.contains("=")) {
+            uiState = uiState.copy(expression = "", input = "")
+        }
         updateInput(format(a))
+    }
+
+    fun onClear() {
+        uiState = uiState.copy(input = "", expression = "", error = null)
     }
 
     // endregion ---------------------------------------------------------------
 
     // region Helpers -----------------------------------------------------------
 
-    private fun currentNumberOrAns(): Double? = parseInput() ?: uiState.ans
-
-    private fun parseInput(): Double? =
-        uiState.input.replace(',', '.').toDoubleOrNull()
-
-    private fun performOperation(a: Double, op: Operation, b: Double): Double? = when (op) {
-        is Operation.Add -> a + b
-        is Operation.Sub -> a - b
-        is Operation.Mul -> a * b
-        is Operation.Div -> {
-            if (b == 0.0) {
-                setError("Fehler: Division durch 0")
-                null
-            } else a / b
-        }
-    }
-
-    private fun commitResult(result: Double) {
-        uiState = uiState.copy(
-            input = format(result),
-            ans = result,
-            firstOperand = null,
-            pendingOp = null,
-            error = null
-        )
-    }
-
     private fun setError(msg: String) {
         uiState = uiState.copy(error = msg)
     }
 
-    // Format double like a calculator (trim trailing zeros)
     private fun format(x: Double): String {
         val symbols = DecimalFormatSymbols(Locale.US)
-        val df = DecimalFormat("#.##########", symbols) // up to 10 decimals
+        val df = DecimalFormat("#.##########", symbols)
         return df.format(x)
     }
 
     private fun updateInput(newValue: String) {
-        // Optional: constrain length to avoid huge numbers
         val trimmed = newValue.take(24)
         uiState = uiState.copy(input = trimmed, error = null)
+    }
+
+    private fun evaluateExpression(expr: String): Double? {
+        return try {
+            val tokens = tokenize(expr)
+            val postfix = infixToPostfix(tokens)
+            evalPostfix(postfix)
+        } catch (e: IllegalArgumentException) {
+            setError("Fehler: ${e.message}")
+            null
+        }
+    }
+
+    private fun tokenize(expr: String): List<String> {
+        val tokens = mutableListOf<String>()
+        var i = 0
+        while (i < expr.length) {
+            val c = expr[i]
+            when {
+                c.isDigit() || c == '.' -> {
+                    val start = i
+                    i++
+                    while (i < expr.length && (expr[i].isDigit() || expr[i] == '.')) i++
+                    tokens.add(expr.substring(start, i))
+                }
+                c in charArrayOf('+', '-', '*', '/', '(', ')') -> {
+                    tokens.add(c.toString())
+                    i++
+                }
+                c.isWhitespace() -> i++
+                else -> throw IllegalArgumentException("Ungültiges Zeichen")
+            }
+        }
+        return tokens
+    }
+
+    private fun infixToPostfix(tokens: List<String>): List<String> {
+        val out = mutableListOf<String>()
+        val stack = ArrayDeque<String>()
+        val prec = mapOf("+" to 1, "-" to 1, "*" to 2, "/" to 2)
+        for (t in tokens) {
+            when {
+                t.toDoubleOrNull() != null -> out.add(t)
+                t in prec.keys -> {
+                    while (stack.isNotEmpty() && stack.last() != "(" && prec[stack.last()]!! >= prec[t]!!) {
+                        out.add(stack.removeLast())
+                    }
+                    stack.add(t)
+                }
+                t == "(" -> stack.add(t)
+                t == ")" -> {
+                    while (stack.isNotEmpty() && stack.last() != "(") {
+                        out.add(stack.removeLast())
+                    }
+                    if (stack.isEmpty() || stack.removeLast() != "(") {
+                        throw IllegalArgumentException("Klammerfehler")
+                    }
+                }
+            }
+        }
+        while (stack.isNotEmpty()) {
+            val op = stack.removeLast()
+            if (op == "(") throw IllegalArgumentException("Klammerfehler")
+            out.add(op)
+        }
+        return out
+    }
+
+    private fun evalPostfix(post: List<String>): Double {
+        val stack = ArrayDeque<Double>()
+        for (t in post) {
+            when {
+                t.toDoubleOrNull() != null -> stack.add(t.toDouble())
+                t in listOf("+", "-", "*", "/") -> {
+                    val b = stack.removeLastOrNull() ?: throw IllegalArgumentException("Ungültiger Ausdruck")
+                    val a = stack.removeLastOrNull() ?: throw IllegalArgumentException("Ungültiger Ausdruck")
+                    val res = when (t) {
+                        "+" -> a + b
+                        "-" -> a - b
+                        "*" -> a * b
+                        "/" -> {
+                            if (b == 0.0) throw IllegalArgumentException("Division durch 0")
+                            a / b
+                        }
+                        else -> 0.0
+                    }
+                    stack.add(res)
+                }
+            }
+        }
+        if (stack.size != 1) throw IllegalArgumentException("Ungültiger Ausdruck")
+        return stack.last()
     }
 
     // endregion ---------------------------------------------------------------
@@ -199,6 +251,7 @@ fun CalculatorScreen(vm: CalculatorViewModel) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         DisplayArea(
+            expression = s.expression.replace("*", "×").replace("/", "÷"),
             value = s.input.ifEmpty { s.ans?.let { "(ANS) ${formatStatic(it)}" } ?: "0" },
             error = s.error
         )
@@ -206,37 +259,37 @@ fun CalculatorScreen(vm: CalculatorViewModel) {
         // Row 1
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalcButton("C", Modifier.weight(1f)) { vm.onClear() }
+            CalcButton("(", Modifier.weight(1f)) { vm.onOpenParen() }
+            CalcButton(")", Modifier.weight(1f)) { vm.onCloseParen() }
             CalcButton("ANS", Modifier.weight(1f)) { vm.onAns() }
-            CalcButton("x²", Modifier.weight(1f)) { vm.onUnarySquare() }
-            CalcButton("√x", Modifier.weight(1f)) { vm.onUnarySqrt() }
         }
         // Row 2
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalcButton("7", Modifier.weight(1f)) { vm.onDigit('7') }
             CalcButton("8", Modifier.weight(1f)) { vm.onDigit('8') }
             CalcButton("9", Modifier.weight(1f)) { vm.onDigit('9') }
-            CalcButton("÷", Modifier.weight(1f)) { vm.onBinary(Operation.Div) }
+            CalcButton("÷", Modifier.weight(1f)) { vm.onOperator('/') }
         }
         // Row 3
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalcButton("4", Modifier.weight(1f)) { vm.onDigit('4') }
             CalcButton("5", Modifier.weight(1f)) { vm.onDigit('5') }
             CalcButton("6", Modifier.weight(1f)) { vm.onDigit('6') }
-            CalcButton("×", Modifier.weight(1f)) { vm.onBinary(Operation.Mul) }
+            CalcButton("×", Modifier.weight(1f)) { vm.onOperator('*') }
         }
         // Row 4
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalcButton("1", Modifier.weight(1f)) { vm.onDigit('1') }
             CalcButton("2", Modifier.weight(1f)) { vm.onDigit('2') }
             CalcButton("3", Modifier.weight(1f)) { vm.onDigit('3') }
-            CalcButton("−", Modifier.weight(1f)) { vm.onBinary(Operation.Sub) }
+            CalcButton("−", Modifier.weight(1f)) { vm.onOperator('-') }
         }
         // Row 5
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalcButton("0", Modifier.weight(1f)) { vm.onDigit('0') }
             CalcButton(decimalSeparator.toString(), Modifier.weight(1f)) { vm.onDot() }
             CalcButton("=", Modifier.weight(1f)) { vm.onEquals() }
-            CalcButton("+", Modifier.weight(1f)) { vm.onBinary(Operation.Add) }
+            CalcButton("+", Modifier.weight(1f)) { vm.onOperator('+') }
         }
         Text(
             text = "Hinweis: ANS setzt das letzte Ergebnis als Eingabe.",
@@ -246,8 +299,16 @@ fun CalculatorScreen(vm: CalculatorViewModel) {
 }
 
 @Composable
-fun DisplayArea(value: String, error: String?) {
+fun DisplayArea(expression: String, value: String, error: String?) {
     Column(Modifier.fillMaxWidth()) {
+        Text(
+            text = expression,
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.End,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp)
+        )
         Text(
             text = value,
             style = MaterialTheme.typography.headlineMedium,
