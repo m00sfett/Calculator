@@ -1,0 +1,1 @@
+Android calculator in Kotlin with Jetpack Compose featuring addition subtraction multiplication division square and square root and an ANS function to reuse the last result built as a beginner friendly project to learn Compose state ViewModel patterns and clean Kotlin basics.
