@@ -14,6 +14,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.math.sqrt
 import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
+import java.util.Locale
 
 // --- Kotlin basics in action ---
 // data class: holds pure UI state data
@@ -124,7 +126,7 @@ class CalculatorViewModel : ViewModel() {
     private fun currentNumberOrAns(): Double? = parseInput() ?: uiState.ans
 
     private fun parseInput(): Double? =
-        uiState.input.toDoubleOrNull()
+        uiState.input.replace(',', '.').toDoubleOrNull()
 
     private fun commitResult(result: Double) {
         uiState = uiState.copy(
@@ -142,7 +144,8 @@ class CalculatorViewModel : ViewModel() {
 
     // Format double like a calculator (trim trailing zeros)
     private fun format(x: Double): String {
-        val df = DecimalFormat("#.##########") // up to 10 decimals
+        val symbols = DecimalFormatSymbols(Locale.US)
+        val df = DecimalFormat("#.##########", symbols) // up to 10 decimals
         return df.format(x)
     }
 
@@ -172,6 +175,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CalculatorScreen(vm: CalculatorViewModel) {
     val s = vm.uiState
+    val decimalSeparator = DecimalFormatSymbols(Locale.US).decimalSeparator
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -214,7 +218,7 @@ fun CalculatorScreen(vm: CalculatorViewModel) {
         // Row 5
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalcButton("0", Modifier.weight(1f)) { vm.onDigit('0') }
-            CalcButton(",", Modifier.weight(1f)) { vm.onDot() } // German decimal label, still uses '.'
+            CalcButton(decimalSeparator.toString(), Modifier.weight(1f)) { vm.onDot() }
             CalcButton("=", Modifier.weight(1f)) { vm.onEquals() }
             CalcButton("+", Modifier.weight(1f)) { vm.onBinary(Operation.Add) }
         }
@@ -267,4 +271,5 @@ fun CalcButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit
 }
 
 // Utility for read-only formatting inside @Composable
-private fun formatStatic(x: Double): String = DecimalFormat("#.##########").format(x)
+private fun formatStatic(x: Double): String =
+    DecimalFormat("#.##########", DecimalFormatSymbols(Locale.US)).format(x)
