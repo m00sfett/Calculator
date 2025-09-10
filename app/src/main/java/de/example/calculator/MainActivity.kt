@@ -16,21 +16,24 @@ import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 
-// --- Kotlin basics in action ---
-// data class: holds pure UI state data
+// --- Kotlin-Grundlagen anschaulich demonstriert ---
+// Eine data class in Kotlin enthält nur Daten.
+// Hier speichern wir den kompletten Zustand der Benutzeroberfläche.
 data class CalculatorUiState(
-    val input: String = "",        // current input buffer (as text)
-    val expression: String = "",   // full expression shown on top
-    val ans: Double? = null,       // last result ("ANS")
-    val error: String? = null      // nullable = no error
+    val input: String = "",        // aktuelle Eingabe, als Text gespeichert
+    val expression: String = "",   // kompletter Ausdruck, der oben angezeigt wird
+    val ans: Double? = null,       // letztes Ergebnis; kann mit ANS erneut genutzt werden
+    val error: String? = null      // Fehlermeldung, null bedeutet kein Fehler
 )
 
 class CalculatorViewModel : ViewModel() {
     var uiState by mutableStateOf(CalculatorUiState())
         private set
 
-    // region Intent handlers ---------------------------------------------------
+    // Bereich: Funktionen, die auf Tastendrücke reagieren
 
+    // Wird aufgerufen, wenn der Nutzer eine Ziffer drückt.
+    // Fügt die Ziffer an das aktuelle Eingabefeld an.
     fun onDigit(ch: Char) {
         if (ch in '0'..'9') {
             if (uiState.expression.contains("=")) {
@@ -40,6 +43,7 @@ class CalculatorViewModel : ViewModel() {
         }
     }
 
+    // Fügt einen Dezimalpunkt hinzu, falls noch keiner vorhanden ist.
     fun onDot() {
         if (uiState.expression.contains("=")) {
             uiState = uiState.copy(expression = "", input = "")
@@ -50,6 +54,9 @@ class CalculatorViewModel : ViewModel() {
         }
     }
 
+    // Verarbeitet Operatoren wie +, -, * oder /.
+    // Die aktuelle Eingabe wird an den Ausdruck angehängt
+    // und anschließend der Operator eingefügt.
     fun onOperator(op: Char) {
         var expr = uiState.expression
         var inp = uiState.input
@@ -63,6 +70,7 @@ class CalculatorViewModel : ViewModel() {
         uiState = uiState.copy(expression = expr, input = "", error = null)
     }
 
+    // Öffnende Klammer setzen.
     fun onOpenParen() {
         var expr = uiState.expression
         if (expr.contains("=")) expr = ""
@@ -70,6 +78,9 @@ class CalculatorViewModel : ViewModel() {
         uiState = uiState.copy(expression = expr, error = null)
     }
 
+    // Schließende Klammer setzen.
+    // Falls vorher noch eine Zahl im Eingabefeld steht,
+    // wird sie zuerst in den Ausdruck übernommen.
     fun onCloseParen() {
         var expr = uiState.expression
         var inp = uiState.input
@@ -85,6 +96,7 @@ class CalculatorViewModel : ViewModel() {
         uiState = uiState.copy(expression = expr, input = inp, error = null)
     }
 
+    // Berechnet den Ausdruck und zeigt das Ergebnis an.
     fun onEquals() {
         var expr = uiState.expression
         val inp = uiState.input
@@ -100,6 +112,7 @@ class CalculatorViewModel : ViewModel() {
         )
     }
 
+    // Setzt das letzte Ergebnis erneut als Eingabe.
     fun onAns() {
         val a = uiState.ans ?: return
         if (uiState.expression.contains("=")) {
@@ -112,25 +125,28 @@ class CalculatorViewModel : ViewModel() {
         uiState = uiState.copy(input = "", expression = "", error = null)
     }
 
-    // endregion ---------------------------------------------------------------
+    // Ende des Bereichs für Eingabe-Handler
 
-    // region Helpers -----------------------------------------------------------
+    // Bereich: Hilfsfunktionen, unterstützen Berechnung und Anzeige
 
     private fun setError(msg: String) {
         uiState = uiState.copy(error = msg)
     }
 
+    // Formatiert eine Zahl so, dass maximal zehn Nachkommastellen angezeigt werden.
     private fun format(x: Double): String {
         val symbols = DecimalFormatSymbols(Locale.US)
         val df = DecimalFormat("#.##########", symbols)
         return df.format(x)
     }
 
+    // Aktualisiert die Eingabe und beschränkt die Länge auf 24 Zeichen.
     private fun updateInput(newValue: String) {
         val trimmed = newValue.take(24)
         uiState = uiState.copy(input = trimmed, error = null)
     }
 
+    // Zerlegt den Ausdruck, wandelt ihn um und berechnet das Ergebnis.
     private fun evaluateExpression(expr: String): Double? {
         return try {
             val tokens = tokenize(expr)
@@ -142,6 +158,7 @@ class CalculatorViewModel : ViewModel() {
         }
     }
 
+    // Zerlegt einen Rechenausdruck in einzelne Bestandteile (Token).
     private fun tokenize(expr: String): List<String> {
         val tokens = mutableListOf<String>()
         var i = 0
@@ -165,6 +182,8 @@ class CalculatorViewModel : ViewModel() {
         return tokens
     }
 
+    // Wandelt eine Infix-Notation (z.B. 2+3) in eine Postfix-Notation um.
+    // Diese Methode basiert auf dem Shunting-Yard-Algorithmus.
     private fun infixToPostfix(tokens: List<String>): List<String> {
         val out = mutableListOf<String>()
         val stack = ArrayDeque<String>()
@@ -197,6 +216,7 @@ class CalculatorViewModel : ViewModel() {
         return out
     }
 
+    // Rechnet eine Liste in Postfix-Notation aus.
     private fun evalPostfix(post: List<String>): Double {
         val stack = ArrayDeque<Double>()
         for (t in post) {
@@ -223,7 +243,7 @@ class CalculatorViewModel : ViewModel() {
         return stack.last()
     }
 
-    // endregion ---------------------------------------------------------------
+    // Ende des Hilfsfunktions-Bereichs
 }
 
 class MainActivity : ComponentActivity() {
@@ -240,6 +260,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// Hauptoberfläche des Taschenrechners.
 @Composable
 fun CalculatorScreen(vm: CalculatorViewModel) {
     val s = vm.uiState
@@ -256,35 +277,35 @@ fun CalculatorScreen(vm: CalculatorViewModel) {
             error = s.error
         )
         Spacer(Modifier.height(4.dp))
-        // Row 1
+        // Zeile 1: Löschen, Klammern und ANS
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalcButton("C", Modifier.weight(1f)) { vm.onClear() }
             CalcButton("(", Modifier.weight(1f)) { vm.onOpenParen() }
             CalcButton(")", Modifier.weight(1f)) { vm.onCloseParen() }
             CalcButton("ANS", Modifier.weight(1f)) { vm.onAns() }
         }
-        // Row 2
+        // Zeile 2: Zahlen 7 bis 9 und Division
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalcButton("7", Modifier.weight(1f)) { vm.onDigit('7') }
             CalcButton("8", Modifier.weight(1f)) { vm.onDigit('8') }
             CalcButton("9", Modifier.weight(1f)) { vm.onDigit('9') }
             CalcButton("÷", Modifier.weight(1f)) { vm.onOperator('/') }
         }
-        // Row 3
+        // Zeile 3: Zahlen 4 bis 6 und Multiplikation
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalcButton("4", Modifier.weight(1f)) { vm.onDigit('4') }
             CalcButton("5", Modifier.weight(1f)) { vm.onDigit('5') }
             CalcButton("6", Modifier.weight(1f)) { vm.onDigit('6') }
             CalcButton("×", Modifier.weight(1f)) { vm.onOperator('*') }
         }
-        // Row 4
+        // Zeile 4: Zahlen 1 bis 3 und Subtraktion
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalcButton("1", Modifier.weight(1f)) { vm.onDigit('1') }
             CalcButton("2", Modifier.weight(1f)) { vm.onDigit('2') }
             CalcButton("3", Modifier.weight(1f)) { vm.onDigit('3') }
             CalcButton("−", Modifier.weight(1f)) { vm.onOperator('-') }
         }
-        // Row 5
+        // Zeile 5: Null, Dezimalpunkt, Ergebnis und Addition
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CalcButton("0", Modifier.weight(1f)) { vm.onDigit('0') }
             CalcButton(decimalSeparator.toString(), Modifier.weight(1f)) { vm.onDot() }
@@ -298,6 +319,7 @@ fun CalculatorScreen(vm: CalculatorViewModel) {
     }
 }
 
+// Zeigt Ausdruck, aktuelle Eingabe oder das letzte Ergebnis sowie Fehler an.
 @Composable
 fun DisplayArea(expression: String, value: String, error: String?) {
     Column(Modifier.fillMaxWidth()) {
@@ -331,6 +353,7 @@ fun DisplayArea(expression: String, value: String, error: String?) {
     }
 }
 
+// Einfacher Button mit einheitlicher Höhe.
 @Composable
 fun CalcButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Button(
@@ -347,6 +370,6 @@ fun CalcButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit
     )
 }
 
-// Utility for read-only formatting inside @Composable
+// Hilfsfunktion zum Formatieren von Zahlen für die Anzeige.
 private fun formatStatic(x: Double): String =
     DecimalFormat("#.##########", DecimalFormatSymbols(Locale.US)).format(x)
