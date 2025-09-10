@@ -1,1 +1,4 @@
-Android calculator in Kotlin with Jetpack Compose featuring addition subtraction multiplication division square and square root and an ANS function to reuse the last result built as a beginner friendly project to learn Compose state ViewModel patterns and clean Kotlin basics.
+Android-Taschenrechner in Kotlin mit Jetpack Compose. Unterstützt Addition, Subtraktion, Multiplikation, Division und Klammern.
+Die ANS-Taste setzt das letzte Ergebnis erneut ein.
+Das Projekt dient als einfaches Lernbeispiel für Jetpack Compose, ViewModel und grundlegende Kotlin-Konzepte.
+
